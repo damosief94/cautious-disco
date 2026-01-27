@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         env:
           CRD_CODE: ${{ secrets.CRD_CODE4 }}
-          CRD_PIN: ${{ secrets.CRD_PIN }}
+          CRD_PIN: ${{ secrets.CRD_PIN4 }}
         run: |
           # تحديد مسار البرنامج
           $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
