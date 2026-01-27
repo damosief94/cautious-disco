@@ -1,4 +1,4 @@
-name: Ultimate-Win-Ngrok-RDP-Fixed
+name: Ultimate-Win-Ngrok-Debug
 
 on: 
   workflow_dispatch:
@@ -10,12 +10,8 @@ jobs:
       - name: Update Password & Configure User
         shell: pwsh
         run: |
-          # 1. تحديث كلمة المرور للمستخدم الموجود بالفعل بدلاً من إنشائه
           net user runneradmin Passw0rd1234
-          
-          # 2. استخدام PowerShell بدلاً من WMIC لمنع انتهاء صلاحية الباسورد
           Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
-          
           Write-Host "✅ User configured successfully."
 
       - name: Download and Install Ngrok
@@ -23,23 +19,30 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip" -OutFile "ngrok.zip"
           Expand-Archive -Path "ngrok.zip" -DestinationPath "."
-          
-      - name: Connect to Ngrok
+
+      - name: Connect to Ngrok (With Logging)
         shell: pwsh
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
           .\ngrok.exe authtoken $env:NGROK_AUTH_TOKEN
-          # فتح النفق للـ RDP
-          Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+          # تشغيل Ngrok مع حفظ ملف السجل (Log) لمعرفة الأخطاء
+          Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389 --region us --log=ngrok.log"
 
       - name: Get RDP Connection Info
         shell: pwsh
         run: |
-          Start-Sleep -Seconds 10
+          Write-Host "⏳ Waiting for Ngrok tunnel to initialize..."
+          Start-Sleep -Seconds 15
+          
           try {
             $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction Stop
             $publicUrl = $tunnels.tunnels[0].public_url
+            
+            if (-not $publicUrl) {
+                throw "No URL found in API response."
+            }
+
             $cleanUrl = $publicUrl -replace "tcp://", ""
             
             Write-Host "======================================================"
@@ -50,7 +53,16 @@ jobs:
             Write-Host "======================================================"
           }
           catch {
-            Write-Host "❌ Error getting Ngrok URL. Check if Token is correct."
+            Write-Host "❌ Error getting Ngrok URL. Printing Logs:"
+            Write-Host "----------------------------------------"
+            # طباعة سبب الخطأ من ملف السجل
+            if (Test-Path "ngrok.log") {
+                Get-Content "ngrok.log"
+            } else {
+                Write-Host "No log file found. Ngrok failed to start completely."
+            }
+            Write-Host "----------------------------------------"
+            exit 1
           }
 
       - name: Keep Alive
@@ -61,6 +73,5 @@ jobs:
           while ($i -lt 21600) { 
             Start-Sleep -Seconds 60 
             $i += 60
-            # طباعة نقطة كل دقيقة لمنع توقف الـ Log
             Write-Host -NoNewline "."
           }
