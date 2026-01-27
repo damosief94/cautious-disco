@@ -1,4 +1,4 @@
-name: Ultimate-Win-Ngrok-V3-Fixed
+name: Ultimate-Win-CRD
 
 on: 
   workflow_dispatch:
@@ -7,65 +7,40 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Update Password & Configure User
+      - name: Download Chrome Installer
         shell: pwsh
         run: |
-          net user runneradmin Passw0rd1234
-          Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
-          Write-Host "✅ User configured successfully."
+          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "chrome_installer.exe"
+          Start-Process -FilePath "chrome_installer.exe" -Args "/silent /install" -Wait
 
-      - name: Download and Install Ngrok V3 (LATEST)
+      - name: Download and Install CRD
         shell: pwsh
         run: |
-          # تم تحديث الرابط هنا لتحميل النسخة V3 الحديثة
-          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
-          Expand-Archive -Path "ngrok.zip" -DestinationPath "."
+          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
+          Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
 
-      - name: Connect to Ngrok
+      - name: Start Chrome Remote Desktop
         shell: pwsh
         env:
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          CRD_CODE: ${{ secrets.CRD_CODE }}
+          CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
-          .\ngrok.exe authtoken $env:NGROK_AUTH_TOKEN
-          # تشغيل Ngrok مع حفظ السجل
-          Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389 --region us --log=ngrok.log"
+          # تحديد مسار البرنامج
+          $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          
+          # تشغيل السيرفر مع الكود والرقم السري
+          & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=$env:CRD_PIN
 
-      - name: Get RDP Connection Info
+      - name: Success Message
         shell: pwsh
         run: |
-          Write-Host "⏳ Waiting for Ngrok tunnel to initialize..."
-          Start-Sleep -Seconds 10
-          
-          try {
-            $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction Stop
-            $publicUrl = $tunnels.tunnels[0].public_url
-            
-            if (-not $publicUrl) {
-                throw "No URL found."
-            }
-
-            $cleanUrl = $publicUrl -replace "tcp://", ""
-            
-            Write-Host "======================================================"
-            Write-Host "✅ RDP is Ready!"
-            Write-Host "🔐 User: runneradmin"
-            Write-Host "🔑 Pass: Passw0rd1234"
-            Write-Host "🌍 Address: $cleanUrl"
-            Write-Host "======================================================"
-          }
-          catch {
-            Write-Host "❌ Error getting Ngrok URL. Printing Logs:"
-            if (Test-Path "ngrok.log") { Get-Content "ngrok.log" }
-            exit 1
-          }
+          Write-Host "======================================================"
+          Write-Host "✅ The Server is RUNNING!"
+          Write-Host "🔗 Go to: https://remotedesktop.google.com/access"
+          Write-Host "👉 Connect to the PC named 'WIN-...' using your PIN."
+          Write-Host "======================================================"
 
       - name: Keep Alive
         shell: pwsh
         run: |
-          Write-Host "🔄 Loop started... Session will stay alive for 6 hours."
-          $i = 0
-          while ($i -lt 21600) { 
-            Start-Sleep -Seconds 60 
-            $i += 60
-            Write-Host -NoNewline "."
-          }
+          while ($true) { Start-Sleep -Seconds 300 }
