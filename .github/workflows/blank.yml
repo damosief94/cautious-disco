@@ -1,4 +1,4 @@
-name: Ultimate-Win-Ngrok-Debug
+name: Ultimate-Win-Ngrok-V3-Fixed
 
 on: 
   workflow_dispatch:
@@ -14,33 +14,34 @@ jobs:
           Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
           Write-Host "✅ User configured successfully."
 
-      - name: Download and Install Ngrok
+      - name: Download and Install Ngrok V3 (LATEST)
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+          # تم تحديث الرابط هنا لتحميل النسخة V3 الحديثة
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
           Expand-Archive -Path "ngrok.zip" -DestinationPath "."
 
-      - name: Connect to Ngrok (With Logging)
+      - name: Connect to Ngrok
         shell: pwsh
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
           .\ngrok.exe authtoken $env:NGROK_AUTH_TOKEN
-          # تشغيل Ngrok مع حفظ ملف السجل (Log) لمعرفة الأخطاء
+          # تشغيل Ngrok مع حفظ السجل
           Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389 --region us --log=ngrok.log"
 
       - name: Get RDP Connection Info
         shell: pwsh
         run: |
           Write-Host "⏳ Waiting for Ngrok tunnel to initialize..."
-          Start-Sleep -Seconds 15
+          Start-Sleep -Seconds 10
           
           try {
             $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction Stop
             $publicUrl = $tunnels.tunnels[0].public_url
             
             if (-not $publicUrl) {
-                throw "No URL found in API response."
+                throw "No URL found."
             }
 
             $cleanUrl = $publicUrl -replace "tcp://", ""
@@ -54,14 +55,7 @@ jobs:
           }
           catch {
             Write-Host "❌ Error getting Ngrok URL. Printing Logs:"
-            Write-Host "----------------------------------------"
-            # طباعة سبب الخطأ من ملف السجل
-            if (Test-Path "ngrok.log") {
-                Get-Content "ngrok.log"
-            } else {
-                Write-Host "No log file found. Ngrok failed to start completely."
-            }
-            Write-Host "----------------------------------------"
+            if (Test-Path "ngrok.log") { Get-Content "ngrok.log" }
             exit 1
           }
 
