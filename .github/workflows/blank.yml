@@ -1,4 +1,4 @@
-name: Ultimate-Win-CRD
+name: Ultimate-Win-Ngrok-RDP
 
 on: 
   workflow_dispatch:
@@ -7,40 +7,54 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Download Chrome Installer
+      - name: Set Password for User (Admin)
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "chrome_installer.exe"
-          Start-Process -FilePath "chrome_installer.exe" -Args "/silent /install" -Wait
+          # هنا يتم تعيين كلمة المرور للمستخدم Runneradmin
+          # يمكنك تغيير Passw0rd1234 لأي شيء تريده
+          net user runneradmin Passw0rd1234 /add
+          net localgroup administrators runneradmin /add
+          cmd /c "wmic useraccount where name='runneradmin' set PasswordExpires=FALSE"
 
-      - name: Download and Install CRD
+      - name: Download and Install Ngrok
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
-          Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
-
-      - name: Start Chrome Remote Desktop
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+          Expand-Archive -Path "ngrok.zip" -DestinationPath "."
+          
+      - name: Connect to Ngrok
         shell: pwsh
         env:
-          CRD_CODE: ${{ secrets.CRD_CODE }}
-          CRD_PIN: ${{ secrets.CRD_PIN }}
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          # تحديد مسار البرنامج
-          $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          .\ngrok.exe authtoken $env:NGROK_AUTH_TOKEN
+          # فتح بورت 3389 الخاص بالـ RDP
+          Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+
+      - name: Get RDP Connection Info
+        shell: pwsh
+        run: |
+          Start-Sleep -Seconds 10
+          $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+          $publicUrl = $tunnels.tunnels[0].public_url
+          # إزالة //:tcp من الرابط ليصبح جاهزاً
+          $cleanUrl = $publicUrl -replace "tcp://", ""
           
-          # تشغيل السيرفر مع الكود والرقم السري
-          & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=$env:CRD_PIN
-
-      - name: Success Message
-        shell: pwsh
-        run: |
           Write-Host "======================================================"
-          Write-Host "✅ The Server is RUNNING!"
-          Write-Host "🔗 Go to: https://remotedesktop.google.com/access"
-          Write-Host "👉 Connect to the PC named 'WIN-...' using your PIN."
+          Write-Host "✅ RDP is Ready!"
+          Write-Host "🔐 User: runneradmin"
+          Write-Host "🔑 Pass: Passw0rd1234"
+          Write-Host "🌍 Address: $cleanUrl"
           Write-Host "======================================================"
 
-      - name: Keep Alive
+      - name: Prevent Sleep / Keep Alive
         shell: pwsh
         run: |
-          while ($true) { Start-Sleep -Seconds 300 }
+          # حلقة لمنع السيرفر من الإغلاق لمدة 6 ساعات
+          $i = 0
+          while ($i -lt 21600) { 
+            Start-Sleep -Seconds 60 
+            $i += 60
+            # تحريك بسيط للفأرة أو نشاط وهمي لإبقاء الجلسة حية (اختياري)
+            [Console]::Title = "RDP Running - Time elapsed: $i seconds"
+          }
